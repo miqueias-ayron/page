@@ -1,0 +1,141 @@
+
+<div style="padding: 1rem 0;">
+  <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <input type="range" min="0" max="100" value="50" id="reg" style="flex:1;" />
+      <span style="font-size: 13px; color: var(--color-text-secondary); min-width: 140px;">Regularização: <strong id="reg-label">média</strong></span>
+    </div>
+  </div>
+
+  <div style="position: relative; width: 100%; height: 260px;">
+    <canvas id="chart"></canvas>
+  </div>
+
+  <div style="display: flex; gap: 20px; margin-top: 12px; font-size: 12px; color: var(--color-text-secondary); flex-wrap: wrap;">
+    <span style="display:flex;align-items:center;gap:6px;"><span style="width:24px;height:2px;background:#e24b4a;display:inline-block;border-radius:2px;"></span> sobreajuste (θ₁ livre)</span>
+    <span style="display:flex;align-items:center;gap:6px;"><span style="width:24px;height:2px;background:#378add;display:inline-block;border-radius:2px;"></span> regularizado (você controla)</span>
+    <span style="display:flex;align-items:center;gap:6px;"><span style="width:16px;height:2px;background:#888;display:inline-block;border-radius:2px;border-top: 1.5px dashed #888;"></span> subajuste (θ₁ = 0)</span>
+  </div>
+
+  <div id="info" style="margin-top: 1rem; padding: 10px 14px; background: var(--color-background-secondary); border-radius: var(--border-radius-md); font-size: 13px; color: var(--color-text-secondary); line-height: 1.6;"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const xs = [20000,30000,40000,50000,60000,70000,80000,90000,100000];
+const pts = {
+  x: [15000,22000,28000,35000,42000,50000,58000,65000,72000,85000,95000],
+  y: [4.5, 5.2, 5.8, 6.1, 6.8, 7.0, 7.2, 7.3, 7.4, 7.5, 7.6]
+};
+
+function getLines(regVal) {
+  const t = regVal / 100;
+  const slope_over = 0.000045;
+  const slope_under = 0;
+  const slope_reg = slope_over * (1 - t) + slope_under * t;
+  const intercept = 5.5;
+  return xs.map(x => +(intercept + slope_reg * (x - 50000)).toFixed(2));
+}
+
+function overfit(xs) {
+  return xs.map(x => {
+    const n = (x - 50000) / 30000;
+    return +(6.8 + 1.2*n - 0.8*n*n*n).toFixed(2);
+  });
+}
+
+const ctx = document.getElementById('chart');
+const chart = new Chart(ctx, {
+  type: 'scatter',
+  data: {
+    datasets: [
+      {
+        label: 'países',
+        data: pts.x.map((x,i) => ({x, y: pts.y[i]})),
+        backgroundColor: '#63996222',
+        borderColor: '#3B6D11',
+        pointRadius: 5,
+        pointBorderWidth: 1.5,
+        showLine: false
+      },
+      {
+        label: 'sobreajuste',
+        data: xs.map((x,i) => ({x, y: overfit(xs)[i]})),
+        borderColor: '#e24b4a',
+        backgroundColor: 'transparent',
+        showLine: true,
+        pointRadius: 0,
+        borderWidth: 2,
+        tension: 0.4,
+        type: 'line'
+      },
+      {
+        label: 'regularizado',
+        data: xs.map((x,i) => ({x, y: getLines(50)[i]})),
+        borderColor: '#378add',
+        backgroundColor: 'transparent',
+        showLine: true,
+        pointRadius: 0,
+        borderWidth: 2.5,
+        type: 'line'
+      },
+      {
+        label: 'subajuste',
+        data: xs.map(x => ({x, y: 6.8})),
+        borderColor: '#888',
+        backgroundColor: 'transparent',
+        showLine: true,
+        pointRadius: 0,
+        borderWidth: 1.5,
+        borderDash: [5,4],
+        type: 'line'
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    scales: {
+      x: {
+        type: 'linear',
+        min: 10000, max: 105000,
+        title: { display: true, text: 'PIB per capita (USD)', font: { size: 11 }, color: '#888' },
+        ticks: { callback: v => (v/1000)+'k', font: { size: 10 }, color: '#888', maxTicksLimit: 6 }
+      },
+      y: {
+        min: 3, max: 10,
+        title: { display: true, text: 'Satisfação de vida', font: { size: 11 }, color: '#888' },
+        ticks: { font: { size: 10 }, color: '#888' }
+      }
+    }
+  }
+});
+
+const regSlider = document.getElementById('reg');
+const regLabel = document.getElementById('reg-label');
+const info = document.getElementById('info');
+
+function update() {
+  const v = +regSlider.value;
+  let label, desc;
+  if (v < 20) {
+    label = 'fraca'; desc = 'θ₁ quase livre → modelo se curva para seguir cada ponto. Alto risco de sobreajuste.';
+  } else if (v < 50) {
+    label = 'leve'; desc = 'θ₁ tem alguma penalização → reta suaviza, mas ainda captura a tendência bem.';
+  } else if (v < 80) {
+    label = 'média'; desc = 'Equilíbrio: θ₁ aprende a tendência real sem se prender a ruídos dos dados.';
+  } else if (v < 95) {
+    label = 'forte'; desc = 'θ₁ muito penalizado → reta quase horizontal. Começa a perder informação real.';
+  } else {
+    label = 'máxima'; desc = 'θ₁ ≈ 0 → reta totalmente horizontal. Subajuste: o modelo não aprendeu nada.';
+  }
+  regLabel.textContent = label;
+  info.textContent = desc;
+  chart.data.datasets[2].data = xs.map((x,i) => ({x, y: getLines(v)[i]}));
+  chart.update('none');
+}
+
+regSlider.addEventListener('input', update);
+update();
+</script>
